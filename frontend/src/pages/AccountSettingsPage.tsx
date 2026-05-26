@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
+import { AchievementsPanel } from '../components/achievements/AchievementsPanel'
 import { ReportsPanel } from '../components/reports/ReportsPanel'
 import { RideHistoryPanel } from '../components/ride-history/RideHistoryPanel'
 import { BuyTicketsPanel } from '../components/tickets/BuyTicketsPanel'
@@ -10,6 +11,7 @@ const SECTIONS = [
   { slug: 'profil', label: 'Profil' },
   { slug: 'bilety', label: 'Moje bilety' },
   { slug: 'kup-bilet', label: 'Kup bilet' },
+  { slug: 'osiagniecia', label: 'Osiagniecia' },
   { slug: 'historia', label: 'Historia przejazdow' },
   { slug: 'zgloszenia', label: 'Zgloszenia' },
 ] as const
@@ -232,6 +234,8 @@ export function AccountSettingsPage() {
         ) : null}
 
         {activeSection === 'historia' ? <RideHistoryPanel apiRequest={apiRequest} onError={setError} /> : null}
+
+        {activeSection === 'osiagniecia' ? <AchievementsPanel apiRequest={apiRequest} onError={setError} /> : null}
 
         {activeSection === 'zgloszenia' ? (
           <ReportsPanel

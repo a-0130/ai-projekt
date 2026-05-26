@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AchievementController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RideHistoryController;
@@ -50,4 +51,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function (): void {
 
     Route::get('/reports/user', [ReportController::class, 'userIndex']);
     Route::post('/reports', [ReportController::class, 'store']);
+
+    Route::get('/achievements', [AchievementController::class, 'index']);
+    Route::post('/discount-codes/validate', [AchievementController::class, 'validateDiscountCode']);
 });

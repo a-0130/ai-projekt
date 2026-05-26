@@ -6,6 +6,7 @@ use App\Http\Requests\Report\StoreReportRequest;
 use App\Models\Image;
 use App\Models\Report;
 use App\Models\ReportImage;
+use App\Services\AchievementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -14,6 +15,10 @@ use Illuminate\Support\Str;
 
 class ReportController extends Controller
 {
+    public function __construct(private readonly AchievementService $achievements)
+    {
+    }
+
     public function userIndex(Request $request): JsonResponse
     {
         $reports = Report::query()
@@ -73,6 +78,7 @@ class ReportController extends Controller
 
             return $report->load('images');
         });
+        $this->achievements->sync($request->user());
 
         return response()->json([
             'message' => 'Zgloszenie utworzone.',

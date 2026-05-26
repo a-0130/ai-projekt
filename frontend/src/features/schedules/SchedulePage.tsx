@@ -157,12 +157,12 @@ export function SchedulePage() {
     }
   }, [routeId, lineStopId, directionKey, scheduleDate, endpointSplit, activeDirection?.representative_trip_id])
 
-  const mapLine = shapeToLatLngs(activeDirection?.shape ?? [])
+  const mapLine = shapeToLatLngs(activeDirection?.shape ?? []) as [number, number][]
   const selectedStopRow: PatternStopRow | undefined = activeDirection?.stops.find((r) => r.stop.id === lineStopId)
   const mapCenter: [number, number] = selectedStopRow
     ? [selectedStopRow.stop.stop_lat, selectedStopRow.stop.stop_lon]
     : mapLine[0]
-      ? [mapLine[0][0] as number, mapLine[0][1] as number]
+      ? [mapLine[0][0], mapLine[0][1]]
       : activeDirection?.stops[0]
         ? [activeDirection.stops[0].stop.stop_lat, activeDirection.stops[0].stop.stop_lon]
         : [50.041, 21.999]

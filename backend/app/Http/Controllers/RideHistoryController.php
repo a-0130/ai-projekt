@@ -5,10 +5,15 @@ namespace App\Http\Controllers;
 use App\Http\Requests\RideHistory\IndexRideHistoryRequest;
 use App\Http\Requests\RideHistory\StoreRideHistoryRequest;
 use App\Models\RideHistory;
+use App\Services\AchievementService;
 use Illuminate\Http\JsonResponse;
 
 class RideHistoryController extends Controller
 {
+    public function __construct(private readonly AchievementService $achievements)
+    {
+    }
+
     public function index(IndexRideHistoryRequest $request): JsonResponse
     {
         $rides = RideHistory::query()
@@ -42,6 +47,7 @@ class RideHistoryController extends Controller
         ]);
 
         $ride->load(['trip.route', 'fromStop', 'toStop']);
+        $this->achievements->sync($request->user());
 
         return response()->json([
             'message' => 'Przejazd dodany do historii.',

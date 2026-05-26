@@ -15,7 +15,10 @@ class UserTicket extends Model
     protected $fillable = [
         'user_id',
         'ticket_type_id',
+        'discount_code_id',
         'purchase_date',
+        'discount_amount',
+        'final_price',
         'valid_from',
         'valid_until',
         'is_active',
@@ -25,6 +28,8 @@ class UserTicket extends Model
     {
         return [
             'purchase_date' => 'datetime',
+            'discount_amount' => 'decimal:2',
+            'final_price' => 'decimal:2',
             'valid_from' => 'datetime',
             'valid_until' => 'datetime',
             'is_active' => 'boolean',
@@ -39,6 +44,11 @@ class UserTicket extends Model
     public function ticketType(): BelongsTo
     {
         return $this->belongsTo(TicketType::class);
+    }
+
+    public function discountCode(): BelongsTo
+    {
+        return $this->belongsTo(DiscountCode::class);
     }
 
     public function status(): string

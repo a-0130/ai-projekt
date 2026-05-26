@@ -10,6 +10,8 @@ export type UserTicket = {
   id: number
   ticket_type: TicketType
   purchase_date: string
+  discount_amount: string
+  final_price: string | null
   valid_from: string | null
   valid_until: string | null
   is_active: boolean

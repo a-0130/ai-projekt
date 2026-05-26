@@ -64,4 +64,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(Report::class);
     }
+
+    public function achievements(): HasMany
+    {
+        return $this->hasMany(UserAchievement::class);
+    }
+
+    public function discountCodes(): HasMany
+    {
+        return $this->hasMany(DiscountCode::class);
+    }
 }

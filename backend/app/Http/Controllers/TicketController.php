@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Ticket\PurchaseTicketRequest;
+use App\Models\DiscountCode;
 use App\Models\TicketType;
 use App\Models\UserTicket;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class TicketController extends Controller
@@ -38,29 +41,32 @@ class TicketController extends Controller
     {
         $data = $request->validated();
         $ticketType = TicketType::query()->findOrFail($data['ticket_type_id']);
-
-        if ($ticketType->is_long_term) {
-            $validFrom = Carbon::parse($data['valid_from'])->startOfDay();
-            $validUntil = $validFrom->copy()->addMinutes($ticketType->validity_minutes);
+        $ticket = DB::transaction(function () use ($request, $data, $ticketType): UserTicket {
+            $discountCode = $this->findActiveDiscountCode($request, $data['discount_code'] ?? null);
+            $discountPercent = $discountCode?->discount_percent ?? 0;
+            $discountAmount = round(((float) $ticketType->price * $discountPercent) / 100, 2);
+            $finalPrice = max(0, round((float) $ticketType->price - $discountAmount, 2));
+            $validFrom = $ticketType->is_long_term ? Carbon::parse($data['valid_from'])->startOfDay() : null;
+            $validUntil = $validFrom?->copy()->addMinutes($ticketType->validity_minutes);
 
             $ticket = UserTicket::create([
                 'user_id' => $request->user()->id,
                 'ticket_type_id' => $ticketType->id,
+                'discount_code_id' => $discountCode?->id,
                 'purchase_date' => now(),
+                'discount_amount' => $discountAmount,
+                'final_price' => $finalPrice,
                 'valid_from' => $validFrom,
                 'valid_until' => $validUntil,
-                'is_active' => true,
+                'is_active' => $ticketType->is_long_term,
             ]);
-        } else {
-            $ticket = UserTicket::create([
-                'user_id' => $request->user()->id,
-                'ticket_type_id' => $ticketType->id,
-                'purchase_date' => now(),
-                'valid_from' => null,
-                'valid_until' => null,
-                'is_active' => false,
-            ]);
-        }
+
+            if ($discountCode) {
+                $discountCode->update(['used_at' => now()]);
+            }
+
+            return $ticket;
+        });
 
         $ticket->load('ticketType');
 
@@ -135,6 +141,29 @@ class TicketController extends Controller
             'is_active' => $ticket->is_active,
             'status' => $ticket->status(),
             'can_activate' => $ticket->canActivate(),
+            'discount_amount' => $ticket->discount_amount,
+            'final_price' => $ticket->final_price,
         ];
+    }
+
+    private function findActiveDiscountCode(Request $request, ?string $code): ?DiscountCode
+    {
+        if (! $code) {
+            return null;
+        }
+
+        $discountCode = DiscountCode::query()
+            ->where('user_id', $request->user()->id)
+            ->where('code', Str::upper(trim($code)))
+            ->lockForUpdate()
+            ->first();
+
+        if (! $discountCode || ! $discountCode->isActive()) {
+            throw ValidationException::withMessages([
+                'discount_code' => ['Kod rabatowy jest nieprawidlowy, wykorzystany albo wygasl.'],
+            ]);
+        }
+
+        return $discountCode;
     }
 }

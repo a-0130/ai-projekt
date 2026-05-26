@@ -22,6 +22,7 @@ class PurchaseTicketRequest extends ApiFormRequest
         return array_merge($this->prohibitedPrivilegeRules(), [
             'ticket_type_id' => ValidationRules::positiveId('ticket_types'),
             'valid_from' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:today', 'before_or_equal:'.now()->addYears(2)->format('Y-m-d')],
+            'discount_code' => ['nullable', 'string', 'max:32'],
         ]);
     }
 

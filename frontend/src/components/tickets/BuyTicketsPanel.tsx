@@ -12,6 +12,18 @@ type BuyTicketsPanelProps = {
   setLoading: (loading: boolean) => void
 }
 
+type DiscountValidation = {
+  valid: boolean
+  discount_code: {
+    code: string
+    discount_percent: number
+    discount_amount: string
+    final_price: string
+    expires_at: string | null
+    achievement_name: string | null
+  }
+}
+
 function todayIsoDate(): string {
   const now = new Date()
   const year = now.getFullYear()
@@ -36,8 +48,12 @@ export function BuyTicketsPanel({
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null)
   const [validFrom, setValidFrom] = useState(todayIsoDate())
   const [paymentConfirmed, setPaymentConfirmed] = useState(false)
+  const [discountCode, setDiscountCode] = useState('')
+  const [validatedDiscount, setValidatedDiscount] = useState<DiscountValidation['discount_code'] | null>(null)
+  const [discountLoading, setDiscountLoading] = useState(false)
 
   const selectedType = types.find((type) => type.id === selectedTypeId) ?? null
+  const displayedPrice = validatedDiscount?.final_price ?? selectedType?.price ?? '0'
 
   useEffect(() => {
     let cancelled = false
@@ -91,6 +107,9 @@ export function BuyTicketsPanel({
       if (selectedType.is_long_term) {
         body.valid_from = validFrom
       }
+      if (discountCode.trim()) {
+        body.discount_code = discountCode.trim().toUpperCase()
+      }
 
       const response = await apiRequest<{ message: string }>('/tickets/purchase', {
         method: 'POST',
@@ -99,6 +118,8 @@ export function BuyTicketsPanel({
 
       onMessage(response.message)
       setPaymentConfirmed(false)
+      setDiscountCode('')
+      setValidatedDiscount(null)
       onPurchased()
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Zakup nieudany')
@@ -107,7 +128,34 @@ export function BuyTicketsPanel({
     }
   }
 
-  const isBusy = loading || typesLoading
+  async function handleValidateDiscount() {
+    if (!selectedType || !discountCode.trim()) {
+      setValidatedDiscount(null)
+      return
+    }
+
+    onMessage('')
+    onError('')
+
+    try {
+      setDiscountLoading(true)
+      const response = await apiRequest<DiscountValidation>('/discount-codes/validate', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: discountCode.trim().toUpperCase(),
+          ticket_type_id: selectedType.id,
+        }),
+      })
+      setValidatedDiscount(response.discount_code)
+    } catch (err) {
+      setValidatedDiscount(null)
+      onError(err instanceof Error ? err.message : 'Kod rabatowy jest nieprawidlowy')
+    } finally {
+      setDiscountLoading(false)
+    }
+  }
+
+  const isBusy = loading || typesLoading || discountLoading
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -123,7 +171,10 @@ export function BuyTicketsPanel({
             <span className="mb-1 block text-sm font-medium text-slate-700">Typ biletu</span>
             <select
               value={selectedTypeId ?? ''}
-              onChange={(event) => setSelectedTypeId(Number(event.target.value))}
+              onChange={(event) => {
+                setSelectedTypeId(Number(event.target.value))
+                setValidatedDiscount(null)
+              }}
               disabled={isBusy}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#1754d8] focus:ring-2 focus:ring-[#1754d8]/20 disabled:opacity-60"
             >
@@ -165,6 +216,39 @@ export function BuyTicketsPanel({
             </label>
           )}
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-slate-700">Kod rabatowy</span>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={discountCode}
+                  onChange={(event) => {
+                    setDiscountCode(event.target.value.toUpperCase())
+                    setValidatedDiscount(null)
+                  }}
+                  disabled={isBusy}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm uppercase outline-none focus:border-[#1754d8] focus:ring-2 focus:ring-[#1754d8]/20 disabled:opacity-60"
+                  placeholder="NP. START-ABC12345"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleValidateDiscount()}
+                  disabled={isBusy || !selectedType || !discountCode.trim()}
+                  className="rounded-lg border border-[#1754d8] px-4 py-2 text-sm font-medium text-[#1754d8] transition hover:bg-[#1754d8]/5 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Sprawdz
+                </button>
+              </div>
+            </label>
+            {validatedDiscount ? (
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                Rabat {validatedDiscount.discount_percent}%: -{formatPrice(validatedDiscount.discount_amount)}. Do zaplaty:{' '}
+                {formatPrice(validatedDiscount.final_price)}
+              </div>
+            ) : null}
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -173,7 +257,7 @@ export function BuyTicketsPanel({
               disabled={isBusy}
               className="rounded border-slate-300 text-[#1754d8] focus:ring-[#1754d8]/20 disabled:opacity-60"
             />
-            Potwierdzam symulowana platnosc ({selectedType ? formatPrice(selectedType.price) : '—'})
+            Potwierdzam symulowana platnosc ({selectedType ? formatPrice(displayedPrice) : '-'})
           </label>
 
           <button

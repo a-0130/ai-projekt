@@ -14,7 +14,7 @@ class RideHistorySeeder extends Seeder
 {
     public function run(): void
     {
-        $user = User::query()->where('email', 'test@example.com')->first();
+        $user = User::query()->where('email', (string) config('seed.user.email'))->first();
         if (! $user) {
             return;
         }

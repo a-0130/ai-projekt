@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             GtfsSeeder::class,
             MinimalTestDataSeeder::class,
             RideHistorySeeder::class,
+            AchievementSeeder::class,
         ]);
     }
 }
