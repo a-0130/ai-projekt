@@ -2,16 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\SchedulePdfService;
 use App\Services\TransitPlannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class ScheduleController extends Controller
 {
     public function __construct(
-        private readonly TransitPlannerService $planner
+        private readonly TransitPlannerService $planner,
+        private readonly SchedulePdfService $pdfService,
     ) {
     }
 
@@ -37,6 +40,36 @@ class ScheduleController extends Controller
         }
 
         return response()->json($pattern);
+    }
+
+    public function routesPdf(Request $request): Response|JsonResponse
+    {
+        $data = $request->validate([
+            'route_ids' => ['required', 'string'],
+            'date' => ['nullable', 'date'],
+        ]);
+
+        $routeIds = collect(explode(',', $data['route_ids']))
+            ->map(static fn (string $id): int => (int) trim($id))
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->unique()
+            ->take(6)
+            ->values()
+            ->all();
+
+        if ($routeIds === []) {
+            return response()->json(['message' => 'Wybierz co najmniej jedna linie.'], 422);
+        }
+
+        $date = isset($data['date']) ? Carbon::parse($data['date'], 'Europe/Warsaw')->startOfDay() : now('Europe/Warsaw')->startOfDay();
+        $pdf = $this->pdfService->build($routeIds, $date);
+        $filename = 'rozklad-linii-'.$date->toDateString().'.pdf';
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
     public function routeStopDepartures(Request $request, int $route_id, int $stop_id): JsonResponse

@@ -17,6 +17,7 @@ Route::get('/routes/list', [RoutePlannerController::class, 'listRoutes']);
 Route::get('/trip-details/{trip_id}', [RoutePlannerController::class, 'tripDetails'])->whereNumber('trip_id');
 
 Route::get('/stops', [ScheduleController::class, 'stops']);
+Route::get('/schedules/routes/pdf', [ScheduleController::class, 'routesPdf']);
 Route::get('/schedules/routes/{route_id}/stops/{stop_id}/departures', [ScheduleController::class, 'routeStopDepartures'])
     ->whereNumber('route_id')
     ->whereNumber('stop_id');

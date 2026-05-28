@@ -3,7 +3,7 @@ import { MapContainer, Marker, Polyline, TileLayer } from 'react-leaflet'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { shapeToLatLngs } from '../../components/map/geo'
-import { fetchRoutePattern, fetchRouteStopTimes, fetchRoutesList } from './api'
+import { fetchRoutePattern, fetchRouteStopTimes, fetchRoutesList, getRoutesPdfUrl } from './api'
 import type { DirectionPattern, ListedRoute, PatternStopRow } from './types'
 
 function formatTimeLabel(raw: string): string {
@@ -40,6 +40,7 @@ export function SchedulePage() {
   const [routes, setRoutes] = useState<ListedRoute[]>([])
   const [routesLoading, setRoutesLoading] = useState(true)
   const [routeId, setRouteId] = useState<number | null>(null)
+  const [pdfRouteIds, setPdfRouteIds] = useState<number[]>([])
   const [pattern, setPattern] = useState<DirectionPattern[]>([])
   const [endpointSplit, setEndpointSplit] = useState(false)
   const [directionKey, setDirectionKey] = useState<number | null>(null)
@@ -171,6 +172,23 @@ export function SchedulePage() {
     setLineStopId(row.stop.id)
   }, [])
 
+  const activateRoute = useCallback((id: number) => {
+    setRouteId(id)
+    setLineStopId(null)
+    setPdfRouteIds((current) => (current.includes(id) ? current : [...current, id]))
+  }, [])
+
+  const togglePdfRoute = useCallback((id: number) => {
+    setPdfRouteIds((current) => (current.includes(id) ? current.filter((route) => route !== id) : [...current, id]))
+  }, [])
+
+  const downloadPdf = useCallback(() => {
+    if (pdfRouteIds.length === 0) {
+      return
+    }
+    window.location.assign(getRoutesPdfUrl(pdfRouteIds, scheduleDate))
+  }, [pdfRouteIds, scheduleDate])
+
   const cycleDirection = useCallback(() => {
     if (pattern.length < 2) {
       return
@@ -204,32 +222,58 @@ export function SchedulePage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <h2 className="text-lg font-semibold">Linie</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Linie</h2>
+            <button
+              type="button"
+              onClick={downloadPdf}
+              disabled={pdfRouteIds.length === 0}
+              className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              Pobierz PDF
+            </button>
+          </div>
           {routesLoading ? <Spinner label="Ladowanie linii..." /> : routes.length === 0 ? (
             <p className="text-sm text-slate-500">Brak linii w bazie danych.</p>
           ) : (
-            <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+            <div className="grid max-h-52 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
               {routes.map((r) => {
                 const showMode =
                   (duplicateShortNames.get(r.short_name.trim()) ?? 0) > 1
+                const checkedForPdf = pdfRouteIds.includes(r.id)
                 return (
-                <button
-                  key={r.id}
-                  type="button"
-                  title={r.long_name ?? r.route_id}
-                  onClick={() => {
-                    setRouteId(r.id)
-                    setLineStopId(null)
-                  }}
-                  className={`min-w-[3rem] rounded-lg px-3 py-2 text-sm font-semibold ${
-                    routeId === r.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                  }`}
-                >
-                  {showMode ? `${r.short_name} · ${routeModeSuffix(r.route_type)}` : r.short_name}
-                </button>
+                  <div
+                    key={r.id}
+                    title={r.long_name ?? r.route_id}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-2 ${
+                      routeId === r.id ? 'bg-emerald-50 ring-2 ring-emerald-500' : 'bg-slate-50 ring-1 ring-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checkedForPdf}
+                      onChange={() => togglePdfRoute(r.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                      aria-label={`Dodaj linie ${r.short_name} do PDF`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => activateRoute(r.id)}
+                      className={`min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm font-semibold ${
+                        routeId === r.id ? 'bg-emerald-600 text-white' : 'text-slate-800 hover:bg-slate-100'
+                      }`}
+                    >
+                      {showMode ? `${r.short_name} - ${routeModeSuffix(r.route_type)}` : r.short_name}
+                    </button>
+                  </div>
                 )
               })}
             </div>
+          )}
+          {pdfRouteIds.length > 0 ? (
+            <p className="text-xs text-slate-500">PDF obejmie {pdfRouteIds.length} wybranych linii.</p>
+          ) : (
+            <p className="text-xs text-slate-500">Zaznacz jedna lub kilka linii, aby pobrac wspolny PDF z mapa i rozkladem.</p>
           )}
 
           {patternLoading ? <Spinner label="Ladowanie trasy..." /> : null}

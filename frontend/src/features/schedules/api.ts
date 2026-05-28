@@ -1,4 +1,4 @@
-import { apiGet } from '../../lib/api'
+import { apiGet, getApiBaseUrl } from '../../lib/api'
 import type { ListedRoute, RoutePatternResponse } from './types'
 
 export async function fetchRoutesList(): Promise<ListedRoute[]> {
@@ -27,4 +27,13 @@ export async function fetchRouteStopTimes(params: {
       date: params.date,
     },
   )
+}
+
+export function getRoutesPdfUrl(routeIds: number[], date: string): string {
+  const base = getApiBaseUrl().replace(/\/$/, '')
+  const url = new URL(`${base}/schedules/routes/pdf`)
+  url.searchParams.set('route_ids', routeIds.join(','))
+  url.searchParams.set('date', date)
+
+  return url.toString()
 }
