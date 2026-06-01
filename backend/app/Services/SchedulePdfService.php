@@ -62,7 +62,7 @@ final class SchedulePdfService
         }
 
         $this->drawMap($pdf, $routes);
-        $y = 438;
+        $y = 386;
         foreach ($routes as $routeIndex => $route) {
             $routeLabel = $this->routeName($route['route']);
             $color = self::COLORS[$routeIndex % count(self::COLORS)];
@@ -124,12 +124,9 @@ final class SchedulePdfService
         $boxW = 523.0;
         $boxH = 285.0;
 
-        $pdf->setGray(0.97);
-        $pdf->rect($boxX, $boxY, $boxW, $boxH, true);
-        $pdf->setGray(0.82);
-        $pdf->rect($boxX, $boxY, $boxW, $boxH);
+        $titleY = $boxY + $boxH + 8;
         $pdf->setGray(0);
-        $pdf->text($boxX + 14, $boxY + $boxH - 24, 'Mapa tras', 13, true);
+        $pdf->text($boxX, $titleY, 'Mapa tras', 13, true);
 
         $points = [];
         foreach ($routes as $route) {
@@ -158,10 +155,11 @@ final class SchedulePdfService
             'maxLon' => max($lons),
         ];
 
-        $mapX = $boxX + 22;
-        $mapY = $boxY + 52;
-        $mapW = $boxW - 44;
-        $mapH = $boxH - 92;
+        $routeCount = max(1, count($routes));
+        $mapX = $boxX;
+        $mapY = $boxY;
+        $mapW = $boxW;
+        $mapH = $boxH;
         $mapRender = $this->buildMapBackground($bounds, (int) ($mapW * 2), (int) ($mapH * 2));
         if ($mapRender !== null) {
             $pdf->imageJpeg($mapX, $mapY, $mapW, $mapH, $mapRender['jpeg']);
@@ -191,6 +189,13 @@ final class SchedulePdfService
             };
         }
 
+        $pdf->setGray(0.7);
+        $pdf->rect($mapX, $mapY, $mapW, $mapH);
+
+        $routeWidth = $routeCount > 4 ? 1.15 : 1.8;
+        $endpointRadius = $routeCount > 4 ? 2.4 : 3.4;
+        $stopRadius = $routeCount > 4 ? 0.9 : 1.55;
+
         $pdf->beginClipRect($mapX, $mapY, $mapW, $mapH);
         foreach ($routes as $routeIndex => $route) {
             $color = self::COLORS[$routeIndex % count(self::COLORS)];
@@ -200,36 +205,38 @@ final class SchedulePdfService
                 for ($i = 1, $count = count($shape); $i < $count; $i++) {
                     [$x1, $y1] = $plot((float) $shape[$i - 1]['lat'], (float) $shape[$i - 1]['lon']);
                     [$x2, $y2] = $plot((float) $shape[$i]['lat'], (float) $shape[$i]['lon']);
-                    $pdf->line($x1, $y1, $x2, $y2, 1.8);
+                    $pdf->line($x1, $y1, $x2, $y2, $routeWidth);
                 }
 
                 foreach ($direction['stops'] as $index => $stopRow) {
                     [$x, $y] = $plot((float) $stopRow['stop']['stop_lat'], (float) $stopRow['stop']['stop_lon']);
                     $isEndpoint = $index === 0 || $index === count($direction['stops']) - 1;
-                    $pdf->circle($x, $y, $isEndpoint ? 3.4 : 1.55, true);
+                    $pdf->circle($x, $y, $isEndpoint ? $endpointRadius : $stopRadius, true);
                 }
             }
         }
         $pdf->endClip();
 
-        $legendTop = $boxY + 36;
-        $legendColW = ($boxW - 28) / 2;
+        $legendY = $boxY - 16;
+        $legendColW = $boxW / 4;
         foreach ($routes as $routeIndex => $route) {
-            $col = $routeIndex % 2;
-            $row = intdiv($routeIndex, 2);
-            $legendX = $boxX + 14 + ($col * $legendColW);
-            $legendY = $legendTop - ($row * 13);
-            if ($legendY < $boxY + 18) {
+            $col = $routeIndex % 4;
+            $row = intdiv($routeIndex, 4);
+            $itemY = $legendY - ($row * 10);
+            if ($itemY < $boxY - 44) {
+                $pdf->setGray(0);
+                $pdf->text($boxX, $itemY, '+ '.($routeCount - $routeIndex).' kolejnych tras w PDF', 6.8);
                 break;
             }
+            $legendX = $boxX + ($col * $legendColW);
 
             $pdf->setRgb(...self::COLORS[$routeIndex % count(self::COLORS)]);
-            $pdf->line($legendX, $legendY + 3, $legendX + 24, $legendY + 3, 2.2);
+            $pdf->line($legendX, $itemY + 3, $legendX + 18, $itemY + 3, 2.0);
             $pdf->setGray(0);
-            $pdf->text($legendX + 30, $legendY, $this->shorten($route['route']['long_name'] ?? $this->routeName($route['route']), 34), 7.2);
+            $pdf->text($legendX + 22, $itemY, $this->shorten($route['route']['short_name'] ?? $this->routeName($route['route']), 12), 6.8);
         }
         $pdf->setGray(0);
-        $pdf->text($boxX + 14, $boxY + 14, 'Tlo mapy: OpenStreetMap. Trasy wygenerowane z geometrii GTFS.', 7.5);
+        $pdf->text($boxX, $boxY - 54, 'Tlo mapy: OpenStreetMap. Trasy wygenerowane z geometrii GTFS.', 7);
     }
 
     private function buildMapBackground(array $bounds, int $targetW, int $targetH): ?array
@@ -283,21 +290,35 @@ final class SchedulePdfService
         $bg = imagecolorallocate($world, 239, 242, 237);
         imagefilledrectangle($world, 0, 0, imagesx($world), imagesy($world), $bg);
 
+        $expectedTiles = ($tileMaxX - $tileMinX + 1) * ($tileMaxY - $tileMinY + 1);
+        $cacheRoot = function_exists('storage_path') ? storage_path('framework/cache/osm-tiles') : sys_get_temp_dir().'/osm-tiles';
+        if (! is_dir($cacheRoot)) {
+            @mkdir($cacheRoot, 0775, true);
+        }
+
         $maxTile = 2 ** $zoom;
         $context = stream_context_create([
             'http' => [
-                'timeout' => 0.6,
+                'timeout' => 1.2,
                 'header' => "User-Agent: ai-projekt-schedule-pdf/1.0\r\n",
             ],
         ]);
-        $deadline = microtime(true) + 6.0;
+        $deadline = microtime(true) + 12.0;
+        $loadedTiles = 0;
         for ($x = $tileMinX; $x <= $tileMaxX; $x++) {
             $wrappedX = (($x % $maxTile) + $maxTile) % $maxTile;
             for ($y = $tileMinY; $y <= $tileMaxY; $y++) {
                 if (microtime(true) > $deadline) {
                     break 2;
                 }
-                $tileBytes = @file_get_contents("https://tile.openstreetmap.org/{$zoom}/{$wrappedX}/{$y}.png", false, $context);
+                $tilePath = $cacheRoot.'/'.$zoom.'-'.$wrappedX.'-'.$y.'.png';
+                $tileBytes = is_file($tilePath) ? @file_get_contents($tilePath) : false;
+                if ($tileBytes === false) {
+                    $tileBytes = @file_get_contents("https://tile.openstreetmap.org/{$zoom}/{$wrappedX}/{$y}.png", false, $context);
+                    if ($tileBytes !== false) {
+                        @file_put_contents($tilePath, $tileBytes);
+                    }
+                }
                 if ($tileBytes === false) {
                     continue;
                 }
@@ -306,8 +327,15 @@ final class SchedulePdfService
                     continue;
                 }
                 imagecopy($world, $tile, (int) (($x - $tileMinX) * self::TILE_SIZE), (int) (($y - $tileMinY) * self::TILE_SIZE), 0, 0, self::TILE_SIZE, self::TILE_SIZE);
+                $loadedTiles++;
                 imagedestroy($tile);
             }
+        }
+
+        if ($loadedTiles < $expectedTiles) {
+            imagedestroy($world);
+
+            return null;
         }
 
         $cropX = max(0, (int) round($left - ($tileMinX * self::TILE_SIZE)));

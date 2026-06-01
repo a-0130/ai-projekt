@@ -53,7 +53,7 @@ class ScheduleController extends Controller
             ->map(static fn (string $id): int => (int) trim($id))
             ->filter(static fn (int $id): bool => $id > 0)
             ->unique()
-            ->take(6)
+            ->take(20)
             ->values()
             ->all();
 
