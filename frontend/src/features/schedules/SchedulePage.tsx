@@ -236,7 +236,7 @@ export function SchedulePage() {
           {routesLoading ? <Spinner label="Ladowanie linii..." /> : routes.length === 0 ? (
             <p className="text-sm text-slate-500">Brak linii w bazie danych.</p>
           ) : (
-            <div className="grid max-h-52 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+            <div className="grid max-h-44 w-full max-w-md grid-cols-[repeat(auto-fit,minmax(5.25rem,1fr))] gap-2 overflow-y-auto overflow-x-hidden p-1">
               {routes.map((r) => {
                 const showMode =
                   (duplicateShortNames.get(r.short_name.trim()) ?? 0) > 1
@@ -245,7 +245,7 @@ export function SchedulePage() {
                   <div
                     key={r.id}
                     title={r.long_name ?? r.route_id}
-                    className={`flex items-center gap-2 rounded-lg px-2 py-2 ${
+                    className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 ${
                       routeId === r.id ? 'bg-emerald-50 ring-2 ring-emerald-500' : 'bg-slate-50 ring-1 ring-slate-200'
                     }`}
                   >
@@ -253,13 +253,13 @@ export function SchedulePage() {
                       type="checkbox"
                       checked={checkedForPdf}
                       onChange={() => togglePdfRoute(r.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                      className="h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
                       aria-label={`Dodaj linie ${r.short_name} do PDF`}
                     />
                     <button
                       type="button"
                       onClick={() => activateRoute(r.id)}
-                      className={`min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm font-semibold ${
+                      className={`min-w-0 flex-1 truncate rounded-md px-1.5 py-1 text-left text-sm font-semibold ${
                         routeId === r.id ? 'bg-emerald-600 text-white' : 'text-slate-800 hover:bg-slate-100'
                       }`}
                     >

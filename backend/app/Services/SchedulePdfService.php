@@ -191,7 +191,7 @@ final class SchedulePdfService
             };
         }
 
-        $legendY = $boxY + 36;
+        $pdf->beginClipRect($mapX, $mapY, $mapW, $mapH);
         foreach ($routes as $routeIndex => $route) {
             $color = self::COLORS[$routeIndex % count(self::COLORS)];
             $pdf->setRgb(...$color);
@@ -209,15 +209,24 @@ final class SchedulePdfService
                     $pdf->circle($x, $y, $isEndpoint ? 3.4 : 1.55, true);
                 }
             }
+        }
+        $pdf->endClip();
 
-            $pdf->line($boxX + 14, $legendY + 3, $boxX + 44, $legendY + 3, 2.2);
-            $pdf->setGray(0);
-            $legendLines = array_slice($pdf->wrap($this->routeName($route['route']), 72), 0, 2);
-            foreach ($legendLines as $line) {
-                $pdf->text($boxX + 52, $legendY, $line, 7.5);
-                $legendY -= 9;
+        $legendTop = $boxY + 36;
+        $legendColW = ($boxW - 28) / 2;
+        foreach ($routes as $routeIndex => $route) {
+            $col = $routeIndex % 2;
+            $row = intdiv($routeIndex, 2);
+            $legendX = $boxX + 14 + ($col * $legendColW);
+            $legendY = $legendTop - ($row * 13);
+            if ($legendY < $boxY + 18) {
+                break;
             }
-            $legendY -= 5;
+
+            $pdf->setRgb(...self::COLORS[$routeIndex % count(self::COLORS)]);
+            $pdf->line($legendX, $legendY + 3, $legendX + 24, $legendY + 3, 2.2);
+            $pdf->setGray(0);
+            $pdf->text($legendX + 30, $legendY, $this->shorten($route['route']['long_name'] ?? $this->routeName($route['route']), 34), 7.2);
         }
         $pdf->setGray(0);
         $pdf->text($boxX + 14, $boxY + 14, 'Tlo mapy: OpenStreetMap. Trasy wygenerowane z geometrii GTFS.', 7.5);
@@ -243,7 +252,7 @@ final class SchedulePdfService
             $height = max(1.0, $bottom - $top);
             $tileCount = (floor($right / self::TILE_SIZE) - floor($left / self::TILE_SIZE) + 1)
                 * (floor($bottom / self::TILE_SIZE) - floor($top / self::TILE_SIZE) + 1);
-            if ($tileCount <= 20) {
+            if ($tileCount <= 12) {
                 break;
             }
         }
@@ -266,7 +275,7 @@ final class SchedulePdfService
         $tileMaxX = (int) floor($right / self::TILE_SIZE);
         $tileMinY = max(0, (int) floor($top / self::TILE_SIZE));
         $tileMaxY = min((2 ** $zoom) - 1, (int) floor($bottom / self::TILE_SIZE));
-        if (($tileMaxX - $tileMinX + 1) * ($tileMaxY - $tileMinY + 1) > 80) {
+        if (($tileMaxX - $tileMinX + 1) * ($tileMaxY - $tileMinY + 1) > 24) {
             return null;
         }
 
@@ -277,13 +286,17 @@ final class SchedulePdfService
         $maxTile = 2 ** $zoom;
         $context = stream_context_create([
             'http' => [
-                'timeout' => 2,
+                'timeout' => 0.6,
                 'header' => "User-Agent: ai-projekt-schedule-pdf/1.0\r\n",
             ],
         ]);
+        $deadline = microtime(true) + 6.0;
         for ($x = $tileMinX; $x <= $tileMaxX; $x++) {
             $wrappedX = (($x % $maxTile) + $maxTile) % $maxTile;
             for ($y = $tileMinY; $y <= $tileMaxY; $y++) {
+                if (microtime(true) > $deadline) {
+                    break 2;
+                }
                 $tileBytes = @file_get_contents("https://tile.openstreetmap.org/{$zoom}/{$wrappedX}/{$y}.png", false, $context);
                 if ($tileBytes === false) {
                     continue;
@@ -397,6 +410,16 @@ final class SchedulePdfService
         }
 
         return trim((string) $route['short_name']) !== '' ? (string) $route['short_name'] : (string) $route['route_id'];
+    }
+
+    private function shorten(string $text, int $maxChars): string
+    {
+        $text = trim($text);
+        if (mb_strlen($text, 'UTF-8') <= $maxChars) {
+            return $text;
+        }
+
+        return rtrim(mb_substr($text, 0, max(1, $maxChars - 3), 'UTF-8')).'...';
     }
 
     private function formatTime(string $raw): string
@@ -513,6 +536,16 @@ final class SimpleSchedulePdf
     public function rect(float $x, float $y, float $w, float $h, bool $fill = false): void
     {
         $this->content .= $this->num($x).' '.$this->num($y).' '.$this->num($w).' '.$this->num($h).' re '.($fill ? "f\n" : "S\n");
+    }
+
+    public function beginClipRect(float $x, float $y, float $w, float $h): void
+    {
+        $this->content .= 'q '.$this->num($x).' '.$this->num($y).' '.$this->num($w).' '.$this->num($h)." re W n\n";
+    }
+
+    public function endClip(): void
+    {
+        $this->content .= "Q\n";
     }
 
     public function imageJpeg(float $x, float $y, float $w, float $h, string $jpeg): void
