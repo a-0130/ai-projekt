@@ -5,13 +5,20 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Profile\UpdatePasswordRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Models\User;
+use App\Services\UserDataExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class ProfileController extends Controller
 {
+    public function __construct(
+        private readonly UserDataExportService $exportService,
+    ) {
+    }
+
     public function me(Request $request): JsonResponse
     {
         return response()->json($this->userPayload($request->user()));
@@ -51,6 +58,19 @@ class ProfileController extends Controller
         return response()->json([
             'message' => 'Haslo zostalo zmienione.',
             'token' => $token,
+        ]);
+    }
+
+    public function exportData(Request $request): Response
+    {
+        $user = $request->user();
+        $pdf = $this->exportService->buildPdf($user);
+        $filename = 'dane-rodo-uzytkownika-'.$user->id.'-'.now('Europe/Warsaw')->format('Y-m-d-His').'.pdf';
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store',
         ]);
     }
 

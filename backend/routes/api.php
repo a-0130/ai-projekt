@@ -33,6 +33,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function (): void {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     Route::get('/auth/me', [ProfileController::class, 'me']);
+    Route::get('/auth/export-data', [ProfileController::class, 'exportData']);
     Route::patch('/auth/profile', [ProfileController::class, 'update']);
     Route::patch('/auth/password', [ProfileController::class, 'updatePassword']);
 

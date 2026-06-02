@@ -6,6 +6,7 @@ import { RideHistoryPanel } from '../components/ride-history/RideHistoryPanel'
 import { BuyTicketsPanel } from '../components/tickets/BuyTicketsPanel'
 import { MyTicketsPanel } from '../components/tickets/MyTicketsPanel'
 import { useAuth, type AuthUser } from '../contexts/AuthContext'
+import { getApiBaseUrl } from '../lib/api'
 
 const SECTIONS = [
   { slug: 'profil', label: 'Profil' },
@@ -21,6 +22,7 @@ type SectionSlug = (typeof SECTIONS)[number]['slug']
 export function AccountSettingsPage() {
   const { section } = useParams<{ section?: string }>()
   const {
+    token,
     user,
     isAuthenticated,
     loading: authLoading,
@@ -121,6 +123,41 @@ export function AccountSettingsPage() {
     }
   }
 
+  async function handleDataExport() {
+    setLoading(true)
+    setError('')
+    setMessage('')
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/auth/export-data`, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(String(payload?.message ?? `HTTP ${response.status}`))
+      }
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') ?? ''
+      const fileNameMatch = disposition.match(/filename="([^"]+)"/)
+      const fileName = fileNameMatch?.[1] ?? 'dane-rodo-uzytkownika.pdf'
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      setMessage('Eksport danych zostal pobrany.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nie udalo sie pobrac eksportu danych')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="space-y-4">
@@ -205,6 +242,20 @@ export function AccountSettingsPage() {
                 />
                 <SubmitButton disabled={loading}>Zmien haslo</SubmitButton>
               </form>
+            </section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:col-span-2">
+              <h2 className="mb-2 text-lg font-semibold">Eksport danych</h2>
+              <p className="mb-4 text-sm text-slate-600">
+                Pobierz dane konta, biletow, przejazdow, zgloszen, osiagniec i kodow rabatowych w pliku JSON.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleDataExport()}
+                disabled={loading}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Eksportuj dane (RODO)
+              </button>
             </section>
           </div>
         ) : null}
