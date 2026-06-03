@@ -483,7 +483,8 @@ final class SimpleSchedulePdf
         $objects = [];
         $pageCount = count($this->pages);
         $fontId = 3 + ($pageCount * 2);
-        $imageStartId = $fontId + 1;
+        $encodingId = $fontId + 1;
+        $imageStartId = $fontId + 2;
         $xObjects = [];
         foreach ($this->images as $index => $image) {
             $xObjects[] = '/'.$image['name'].' '.($imageStartId + $index).' 0 R';
@@ -501,7 +502,8 @@ final class SimpleSchedulePdf
 
         $objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
         $objects[2] = '<< /Type /Pages /Kids ['.implode(' ', $kids).'] /Count '.$pageCount.' >>';
-        $objects[$fontId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+        $objects[$fontId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding '.$encodingId.' 0 R >>';
+        $objects[$encodingId] = $this->encodingObject();
         foreach ($this->images as $index => $image) {
             $objects[$imageStartId + $index] = '<< /Type /XObject /Subtype /Image /Width '.$image['width'].' /Height '.$image['height'].' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '.strlen($image['data'])." >>\nstream\n".$image['data']."\nendstream";
         }
@@ -532,7 +534,7 @@ final class SimpleSchedulePdf
 
     public function text(float $x, float $y, string $text, float $size = 10, bool $bold = false): void
     {
-        $value = $this->escape($this->ascii($text));
+        $value = $this->escape($this->encodeText($text));
         $this->content .= "BT /F1 ".$this->num($size)." Tf ".$this->num($x).' '.$this->num($y)." Td (".$value.") Tj ET\n";
         if ($bold) {
             $this->content .= "BT /F1 ".$this->num($size)." Tf ".$this->num($x + 0.35).' '.$this->num($y)." Td (".$value.") Tj ET\n";
@@ -541,13 +543,12 @@ final class SimpleSchedulePdf
 
     public function wrap(string $text, int $maxChars): array
     {
-        $text = $this->ascii($text);
         $words = preg_split('/\s+/', $text) ?: [];
         $lines = [];
         $line = '';
         foreach ($words as $word) {
             $candidate = $line === '' ? $word : $line.' '.$word;
-            if (strlen($candidate) > $maxChars && $line !== '') {
+            if (mb_strlen($candidate, 'UTF-8') > $maxChars && $line !== '') {
                 $lines[] = $line;
                 $line = $word;
             } else {
@@ -620,16 +621,66 @@ final class SimpleSchedulePdf
         $this->content .= $this->num($gray)." G\n".$this->num($gray)." g\n";
     }
 
-    private function ascii(string $text): string
+    private function encodingObject(): string
     {
-        $converted = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+        return '<< /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [128 /Aogonek /aogonek /Cacute /cacute /Eogonek /eogonek /Lslash /lslash /Nacute /nacute /Sacute /sacute /Zacute /zacute /Zdotaccent /zdotaccent] >>';
+    }
 
-        return $converted === false ? preg_replace('/[^\x20-\x7E]/', '', $text) ?? '' : $converted;
+    private function encodeText(string $text): string
+    {
+        $encoded = '';
+
+        foreach (mb_str_split($text, 1, 'UTF-8') as $char) {
+            $encoded .= $this->encodeChar($char);
+        }
+
+        return $encoded;
+    }
+
+    private function encodeChar(string $char): string
+    {
+        $polish = [
+            'Ą' => "\x80",
+            'ą' => "\x81",
+            'Ć' => "\x82",
+            'ć' => "\x83",
+            'Ę' => "\x84",
+            'ę' => "\x85",
+            'Ł' => "\x86",
+            'ł' => "\x87",
+            'Ń' => "\x88",
+            'ń' => "\x89",
+            'Ś' => "\x8A",
+            'ś' => "\x8B",
+            'Ź' => "\x8C",
+            'ź' => "\x8D",
+            'Ż' => "\x8E",
+            'ż' => "\x8F",
+        ];
+
+        if (isset($polish[$char])) {
+            return $polish[$char];
+        }
+
+        $converted = iconv('UTF-8', 'Windows-1252//TRANSLIT//IGNORE', $char);
+
+        return $converted === false ? '' : $converted;
     }
 
     private function escape(string $text): string
     {
-        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $text);
+        $escaped = '';
+
+        for ($i = 0, $length = strlen($text); $i < $length; $i++) {
+            $byte = ord($text[$i]);
+            if ($text[$i] === '\\' || $text[$i] === '(' || $text[$i] === ')' || $byte < 32 || $byte > 126) {
+                $escaped .= '\\'.str_pad(decoct($byte), 3, '0', STR_PAD_LEFT);
+            } else {
+                $escaped .= $text[$i];
+            }
+        }
+
+        return $escaped;
     }
 
     private function num(float $value): string
